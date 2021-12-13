@@ -1,9 +1,13 @@
 import std/net
 import std/tables
-from std/strutils import split, parseInt
-from std/os import paramCount, commandLineParams
+from std/strutils import split, find, parseInt
 
 import unpack
+
+const
+  defaultHttpPort = 80
+  defaultHttpsPort = 432
+  maxSchemeLength = 16
 
 type 
   Headers = Table[string, string]
@@ -15,10 +19,6 @@ type
     headers: Headers
     body: string
 
-proc parseStatus(status: string): Status =
-  [_, c, m] <- status.split(' ', 2)
-  result = Status(code: c.parseInt, message: m)
-
 proc parseHeaders(headers: seq[string]): Headers =
   for h in headers:
     [header, value] <- h.split(":")
@@ -28,28 +28,40 @@ proc buildRequest(host, path: string): string =
   result &= "GET /" & path & " HTTP/1.0\r\n" 
   result &= "Host: " & host & "\r\n\r\n"
 
-proc requestHttp(url: string, https: bool = false): Response =
-  let s = newSocket()
-  [host, path] <- url.split('/', 1)
-
-  s.connect(host, Port(80))
-  s.send(buildRequest(host, path))
-  
+proc getStatus(socket: Socket): Status =
   var line: string
+  socket.readLine(line)
 
-  s.readLine(line)
-  let status = parseStatus(line)
+  [_, code, message] <- line.split(' ', 2)
+  result = Status(code: parseInt(code), message: message)
 
-  var headerStrings: seq[string]
+proc makeConnection(s: Socket, host: string, ssl: bool) =
+  var port: int
+  if ssl:
+    port = 443
+    newContext().wrapSocket(s)
+  else:
+    port = 80
+
+  s.connect(host, Port(port))
+
+proc makeConnection(s: Socket, host: string, ssl: bool, port: int) =
+  if ssl: newContext().wrapSocket(s)
+  s.connect(host, Port(port))
+
+proc getResponse(s: Socket): Response =
+  let status = s.getStatus()
+
+  var 
+    buffer, body: string
+    headerLines: seq[string]
 
   while true:
-    s.readLine(line)
-    if line == "\c\n": break
-    headerStrings.add(line)
+    s.readLine(buffer)
+    if buffer == "\c\n": break
+    headerLines.add(buffer)
+  let headers = parseHeaders(headerLines)
 
-  let headers = parseHeaders(headerStrings)
-
-  var body, buffer: string
   while s.recv(buffer, 1024) > 0: 
     body &= buffer
 
@@ -58,6 +70,27 @@ proc requestHttp(url: string, https: bool = false): Response =
     headers: headers, 
     body: body
   )
+
+proc sendRequest(s: Socket, url: string, ssl: bool) =
+  var hostName: string
+
+  [host, path] <- url.split('/')
+
+  if ':' in host:
+    [name, port] <- host.split(':')
+    echo port
+    hostName = name
+    s.makeConnection(hostName, ssl, port.parseInt())
+  else:
+    hostName = host
+    s.makeConnection(hostName, ssl)
+
+  s.send(buildRequest(hostName, path))
+
+proc requestHttp(url: string, https: bool = false): Response =
+  let s = newSocket()
+  s.sendRequest(url, https)
+  result = s.getResponse()
 
 proc parseHtml(html: string): string =
   var 
@@ -84,25 +117,20 @@ proc parseHtml(html: string): string =
           currentTag &= c
     closing = false
 
-proc main() =
-  let 
-    fullUrl = commandLineParams()[0]
-    protocolAndUrl = fullUrl.split("://", 1)
+proc getScheme(url: string): (string, string) =
+  let schemeEnd = find(url, "://", last=maxSchemeLength)
 
-  if protocolAndUrl.len != 2:
-    echo "Invalid url."
-    quit(QuitFailure)
+  if 0 > schemeEnd:
+     result = ("https", url)
+  else:
+    result = (url[0..schemeEnd-1], url[schemeEnd+3..^1])
 
-  let 
-    protocol = protocolAndUrl[0]
-    url = protocolAndUrl[1]
-
+proc request*(fullUrl: string): string =
+  let (scheme, url) = fullUrl.getScheme()
   var response: Response
 
-  case (protocol):
+  case (scheme):
     of "http": response = url.requestHttp(https = false)
     of "https": response = url.requestHttp(https = true)
   
-  echo response.body.parseHtml
-
-main()
+  result = response.body.parseHtml
