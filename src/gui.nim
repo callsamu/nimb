@@ -40,7 +40,9 @@ proc bindRenderer(browser: Browser) =
     browser.layout = browser.buildLayout()
 
     for (x, y, c) in browser.layout:
-      canvas.drawText($c, x, y - scroll * scrollFactor)
+      let ys = y - scroll * scrollFactor
+      if ys >= 0 and ys < browser.window.height:
+        canvas.drawText($c, x, ys)
 
 proc redraw(browser: Browser) =
   browser.layout = browser.buildLayout()
