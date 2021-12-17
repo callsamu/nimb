@@ -30,9 +30,6 @@ proc makeTexture(renderer: RendererPtr): TexturePtr =
   
   result = renderer.createTextureFromSurface(surface)
     
-
-
-
 proc main(arg: string) =
   sdl2.init(INIT_EVERYTHING)
 
@@ -40,12 +37,22 @@ proc main(arg: string) =
     window = createWindow("test", 0, 0, 800, 600, 0)
     render = window.createRenderer(-1, Renderer_Accelerated)
     texture = render.makeTexture()
+    evt: sdl2.Event
 
   render.setDrawColor(0, 0, 0, 0)
   render.clear()
   render.copy(texture, nil, nil)
   render.present()
-  delay(4000)
+
+  while true:
+    while (sdl2.pollEvent(evt)):
+      case evt.kind:
+        of QuitEvent:
+          destroyRenderer(render)
+          destroyTexture(texture)
+          destroy(window)
+          return
+        else: discard
 
 
 main("")
