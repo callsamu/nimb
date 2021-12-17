@@ -8,7 +8,25 @@ const
   bmask = uint32 0x00ff0000
   amask = uint32 0xff000000
 
-proc makeTexture(renderer: RendererPtr): TexturePtr =
+type
+  Browser = ref object
+    window: WindowPtr
+    renderer: RendererPtr
+    screen: TexturePtr
+
+proc newBrowser(title: string): Browser =
+  let 
+    window = createWindow(title, 0, 0, 800, 600, 0)
+    render = window.createRenderer(-1, Renderer_Accelerated)
+
+  render.setDrawColor(0, 0, 0, 0)
+  result = Browser(window: window, renderer: render)
+
+proc destroy(self: Browser) =
+  destroyRenderer(self.renderer)
+  destroy(self.window)
+
+proc renderScreen(self: Browser) =
   var 
     image = pix.newImage(800, 600)
     ctx = newContext(image)
@@ -28,31 +46,30 @@ proc makeTexture(renderer: RendererPtr): TexturePtr =
     gmask, bmask, amask
   )
   
-  result = renderer.createTextureFromSurface(surface)
+  self.screen = self.renderer
+    .createTextureFromSurface(surface)
+
+proc display(self: Browser) =
+  self.renderer.clear()
+  self.renderer.copy(self.screen, nil, nil)
+  self.renderer.present()
     
 proc main(arg: string) =
   sdl2.init(INIT_EVERYTHING)
 
   var
-    window = createWindow("test", 0, 0, 800, 600, 0)
-    render = window.createRenderer(-1, Renderer_Accelerated)
-    texture = render.makeTexture()
+    browser = newBrowser("brOwOser")
     evt: sdl2.Event
-
-  render.setDrawColor(0, 0, 0, 0)
-  render.clear()
-  render.copy(texture, nil, nil)
-  render.present()
 
   while true:
     while (sdl2.pollEvent(evt)):
       case evt.kind:
         of QuitEvent:
-          destroyRenderer(render)
-          destroyTexture(texture)
-          destroy(window)
+          browser.destroy()
           return
         else: discard
+    browser.renderScreen()
+    browser.display()
 
 
 main("")
