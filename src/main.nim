@@ -18,6 +18,7 @@ type
     renderer: RendererPtr
     screen: TexturePtr
     layout: Layout
+    scroll: float32
   Display = tuple
     pos: Vec2
     span: Span
@@ -66,18 +67,21 @@ proc destroy(self: Browser) =
 
 proc renderScreen(self: Browser) =
   var image = pix.newImage(800, 600)
-  let maxHeight = self.window.getSize().y
+  let 
+    maxHeight = self.window.getSize().y
+    scroll = vec2(0, self.scroll)
 
   image.fill(rgba(255, 255, 255, 255))
 
   for (pos, span) in self.layout:
-    if pos.y < 0: continue
-    elif pos.y > maxHeight.float: break
+    let sPos = pos + scroll
+    if sPos.y < 0: continue
+    elif sPos.y > maxHeight.float: break
 
     image.fillText(
       span.font, 
       span.text,
-      translate(pos)
+      translate(sPos)
     )
 
   var 
@@ -113,6 +117,13 @@ proc main(url: string) =
         of QuitEvent:
           browser.destroy()
           return
+        of KeyDown:
+          case evt.key.keysym.scancode:
+            of SDL_SCANCODE_UP:
+              browser.scroll += 4.0
+            of SDL_SCANCODE_DOWN:
+              browser.scroll -= 4.0
+            else: discard
         else: discard
     browser.renderScreen()
     browser.display()
