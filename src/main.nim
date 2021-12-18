@@ -1,6 +1,8 @@
 import sdl2
 import pixie as pix
+import strutils
 from network import request
+
 
 const
   rmask = uint32 0x000000ff
@@ -8,11 +10,47 @@ const
   bmask = uint32 0x00ff0000
   amask = uint32 0xff000000
 
+var mainFont = readTypeface("FreeSans.ttf")
+
 type
   Browser = ref object
     window: WindowPtr
     renderer: RendererPtr
     screen: TexturePtr
+    layout: Layout
+  Display = tuple
+    pos: Vec2
+    span: Span
+  Layout = seq[Display]
+
+proc buildLayout(self: Browser, text: string): Layout =
+  let 
+    face = mainFont
+    maxWidth = self
+      .window.getSize().x.float
+    
+  var 
+    x, y: float = 0.0
+    font = newFont(face)
+    yd = font.defaultLineHeight() * 1.50
+
+  font.size = 20.0
+  font.paint = rgba(0, 0, 0, 255)
+
+  let whitespace = font.computeBounds(" ").x
+
+  for line in text.splitLines:
+    for word in line.splitWhitespace:
+      let 
+        w = font.computeBounds(word).x
+        span = newSpan(word, font)
+      if w + x > maxWidth:
+        y += yd
+        x = 0
+      result.add((vec2(x, y), span))
+      x += w + whitespace
+    y += yd
+    x = 0
 
 proc newBrowser(title: string): Browser =
   let 
@@ -27,17 +65,23 @@ proc destroy(self: Browser) =
   destroy(self.window)
 
 proc renderScreen(self: Browser) =
-  var 
-    image = pix.newImage(800, 600)
-    ctx = newContext(image)
+  var image = pix.newImage(800, 600)
+  let maxHeight = self.window.getSize().y
 
-  ctx.fillStyle = pix.rgba(0, 0, 0, 255)
-  ctx.fillRect(0, 0, 800, 600)
-  ctx.fillStyle = pix.rgba(0, 0, 255, 255)
-  ctx.fillRect(0, 0, 400, 300)
+  image.fill(rgba(255, 255, 255, 255))
+
+  for (pos, span) in self.layout:
+    if pos.y < 0: continue
+    elif pos.y > maxHeight.float: break
+
+    image.fillText(
+      span.font, 
+      span.text,
+      translate(pos)
+    )
 
   var 
-    data = ctx.image.data[0].addr
+    data = image.data[0].addr
     surface: SurfacePtr
 
   surface = sdl2.createRGBSurfaceFrom(
@@ -54,12 +98,14 @@ proc display(self: Browser) =
   self.renderer.copy(self.screen, nil, nil)
   self.renderer.present()
     
-proc main(arg: string) =
+proc main(url: string) =
   sdl2.init(INIT_EVERYTHING)
 
   var
     browser = newBrowser("brOwOser")
     evt: sdl2.Event
+  
+  browser.layout = browser.buildLayout(request(url))
 
   while true:
     while (sdl2.pollEvent(evt)):
@@ -72,5 +118,5 @@ proc main(arg: string) =
     browser.display()
 
 
-main("")
+main("https://stallman.org/")
 
