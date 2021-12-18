@@ -9,7 +9,7 @@ const
   bmask = uint32 0x00ff0000
   amask = uint32 0xff000000
 
-var mainFont = readTypeface("FreeSans.ttf")
+var mainFont = readTypeface("fonts/FreeSans.ttf")
 
 type
   Browser = ref object
@@ -129,8 +129,9 @@ proc main(url: string) =
     browser.renderScreen()
     browser.display()
 
-if paramCount() <= 0:
-  echo "Please, provide and URL"
-else:
-  main(commandLineParams()[0])
+when isMainModule:
+  if paramCount() <= 0:
+    echo "Please, provide and URL"
+  else:
+    main(commandLineParams()[0])
 
