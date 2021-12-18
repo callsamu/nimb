@@ -1,3 +1,5 @@
+# TODO: Implement url parsing as a separate module
+
 import std/net
 import std/tables
 from std/strutils import split, find, parseInt
@@ -38,10 +40,10 @@ proc getStatus(socket: Socket): Status =
 proc makeConnection(s: Socket, host: string, ssl: bool) =
   var port: int
   if ssl:
-    port = 443
+    port = defaultHttpsPort
     newContext().wrapSocket(s)
   else:
-    port = 80
+    port = defaultHttpPort
 
   s.connect(host, Port(port))
 
