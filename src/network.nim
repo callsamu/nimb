@@ -75,7 +75,7 @@ proc sendRequest(s: Socket, url: string, ssl: bool) =
   var hostName, host, path: string
 
   if '/' in url:
-    let split = split("/")
+    let split = url.split("/", 1)
     host = split[0]
     path = split[1]
   else:
