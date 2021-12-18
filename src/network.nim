@@ -72,9 +72,15 @@ proc getResponse(s: Socket): Response =
   )
 
 proc sendRequest(s: Socket, url: string, ssl: bool) =
-  var hostName: string
+  var hostName, host, path: string
 
-  [host, path] <- url.split('/')
+  if '/' in url:
+    let split = split("/")
+    host = split[0]
+    path = split[1]
+  else:
+    host = url
+    path = "/"
 
   if ':' in host:
     [name, port] <- host.split(':')
