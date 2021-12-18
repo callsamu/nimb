@@ -1,6 +1,5 @@
-import sdl2
+import sdl2, strutils, os
 import pixie as pix
-import strutils
 from network import request
 
 
@@ -120,14 +119,18 @@ proc main(url: string) =
         of KeyDown:
           case evt.key.keysym.scancode:
             of SDL_SCANCODE_UP:
-              browser.scroll += 4.0
+              browser.scroll += 2.0
             of SDL_SCANCODE_DOWN:
-              browser.scroll -= 4.0
+              browser.scroll -= 2.0
+            of SDL_SCANCODE_SPACE:
+              browser.scroll -= 600.0
             else: discard
         else: discard
     browser.renderScreen()
     browser.display()
 
-
-main("https://stallman.org/")
+if paramCount() <= 0:
+  echo "Please, provide and URL"
+else:
+  main(commandLineParams()[0])
 
