@@ -99,7 +99,7 @@ proc request*(url: string): string =
 
   case (url.scheme):
     of "http": 
-      if url.port == "": url.port = "8000"
+      if url.port == "": url.port = "80"
       response = url.requestHttp(https = false)
     of "https": 
       if url.port == "": url.port = "432"
