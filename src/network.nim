@@ -48,8 +48,8 @@ proc getResponse(s: Socket): Response =
   )
 
 proc buildRequest(host, path: string): string =
-  result &= "GET /" & path & " HTTP/1.0\r\n" 
-  result &= "Host: " & host & "\r\n\r\n"
+  result &= "GET /"&path&" HTTP/1.0\r\n" 
+  result &= "Host: "&host&"\r\n\r\n"
 
 proc makeConnection(s: Socket, url: URI, ssl: SslContext = nil) =
   if ssl != nil: ssl.wrapSocket(s)
@@ -98,14 +98,15 @@ proc request*(rawUrl: string): string =
       else: parseUri("http://" & rawUrl)
     response: Response
 
-  echo url.scheme
+  echo url.port
 
   case (url.scheme):
     of "http": 
       if url.port == "": url.port = "80"
       response = url.requestHttp(https = false)
     of "https": 
-      if url.port == "": url.port = "433"
+      if url.port == "": url.port = "443"
+      echo url.port
       response = url.requestHttp(https = true)
     else: echo "Scheme ",url.scheme," is not supported."
   
