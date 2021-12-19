@@ -93,8 +93,10 @@ proc renderScreen(self: Browser) =
     gmask, bmask, amask
   )
   
+  destroyTexture(self.screen)
   self.screen = self.renderer
     .createTextureFromSurface(surface)
+
 
 proc display(self: Browser) =
   self.renderer.clear()
