@@ -52,8 +52,7 @@ proc buildRequest(host, path: string): string =
   result &= "Host: " & host & "\r\n\r\n"
 
 proc makeConnection(s: Socket, url: URI, ssl: SslContext = nil) =
-  if ssl != nil:
-    ssl.wrapSocket(s)
+  if ssl != nil: ssl.wrapSocket(s)
   s.connect(url.hostName, Port(url.port.parseInt))
 
 proc sendRequest(s: Socket, url: URI, ssl: bool) =
@@ -92,17 +91,22 @@ proc parseHtml(html: string): string =
           currentTag &= c
     closing = false
 
-proc request*(url: string): string =
+proc request*(rawUrl: string): string =
   var 
-    url = parseUri(url)
+    url = 
+      if rawUrl.find("://") > 0: parseUri(rawUrl)
+      else: parseUri("http://" & rawUrl)
     response: Response
+
+  echo url.scheme
 
   case (url.scheme):
     of "http": 
       if url.port == "": url.port = "80"
       response = url.requestHttp(https = false)
     of "https": 
-      if url.port == "": url.port = "432"
+      if url.port == "": url.port = "433"
       response = url.requestHttp(https = true)
+    else: echo "Scheme ",url.scheme," is not supported."
   
   result = response.body.parseHtml
