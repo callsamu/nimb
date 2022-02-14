@@ -7,10 +7,9 @@ const
   bmask = uint32 0x00ff0000
   amask = uint32 0xff000000
 
-proc imageToSurface*(data: ptr, w, h: int): SurfacePtr =
-  result = sdl2.createTextureFromSurface(
+proc imageToSurface*(data: ptr ColorRGBX, w, h: int): SurfacePtr =
+  result = sdl2.createRGBSurfaceFrom(
     data, cint w, cint h, 
     cint 32, cint 4*w,
     rmask, gmask, bmask, amask
   )
-
