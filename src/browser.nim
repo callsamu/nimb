@@ -1,6 +1,6 @@
 import sdl2
 import pixie as pix
-import layout
+import layout, helpers
 
 type
   Browser* = ref object
@@ -10,16 +10,12 @@ type
     layout*: Layout
     scroll*: float32
 
-const
-  rmask = uint32 0x000000ff
-  gmask = uint32 0x0000ff00
-  bmask = uint32 0x00ff0000
-  amask = uint32 0xff000000
-
 proc newBrowser*(title: string): Browser =
   let 
     window = createWindow(title, 0, 0, 800, 600, 0)
-    render = window.createRenderer(-1, Renderer_Accelerated)
+    render = window.createRenderer(-1, 
+      Renderer_Accelerated or Renderer_PresentVsync
+    )
 
   render.setDrawColor(0, 0, 0, 0)
   result = Browser(window: window, renderer: render)
@@ -37,7 +33,7 @@ proc renderScreen*(self: Browser) =
 
   image.fill(rgba(255, 255, 255, 255))
 
-  for (pos, span) in self.layout:
+  for (pos, span) in self.layout.display:
     let sPos = pos + scroll
     if sPos.y < 0: continue
     elif sPos.y > maxHeight.float: break
@@ -48,16 +44,10 @@ proc renderScreen*(self: Browser) =
       translate(sPos)
     )
 
-  var 
+  let 
     data = image.data[0].addr
-    surface: SurfacePtr
+    surface = imageToSurface(data, 800, 600)
 
-  surface = sdl2.createRGBSurfaceFrom(
-    data, cint 800, cint 600, 
-    cint 32, cint 4*800, rmask, 
-    gmask, bmask, amask
-  )
-  
   destroyTexture(self.screen)
   self.screen = self.renderer
     .createTextureFromSurface(surface)
