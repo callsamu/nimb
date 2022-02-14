@@ -1,7 +1,7 @@
 import sdl2, os
 import browser, layout
 from network/net import request
-   
+
 proc main(url: string) =
   sdl2.init(INIT_EVERYTHING)
 
@@ -9,7 +9,7 @@ proc main(url: string) =
     browser = newBrowser("brOwOser")
     evt: sdl2.Event
   
-  browser.layout = newLayout(request(url), 800)
+  browser.layout = newLayout(request(url), 800, 600)
 
   while true:
     while (sdl2.pollEvent(evt)):

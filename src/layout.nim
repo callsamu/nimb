@@ -7,9 +7,11 @@ type
   Display* = tuple
     pos: Vec2
     span: Span
-  Layout* = seq[Display]
+  Layout* = object
+    display*: seq[Display]
+    height*: float
 
-proc newLayout*(text: string, width: float): Layout =
+proc newLayout*(text: string, w, h: float): Layout =
   let face = mainFont
     
   var 
@@ -27,11 +29,22 @@ proc newLayout*(text: string, width: float): Layout =
       let 
         w = font.computeBounds(word).x
         span = newSpan(word, font)
-      if w + x > width:
+      if w + x > w:
         y += yd
         x = 0
-      result.add((vec2(x, y), span))
+      result.display.add((
+        vec2(x, y), 
+        span
+      ))
       x += w + whitespace
     y += yd
     x = 0
+  y += yd
+
+  result.height = 
+    if y > h: h
+    else: y
+
+
+
 
