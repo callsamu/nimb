@@ -11,7 +11,7 @@ type
     display*: seq[Display]
     height*: float
 
-proc newLayout*(text: string, w, h: float): Layout =
+proc newLayout*(text: string, width, height: float): Layout =
   let face = mainFont
     
   var 
@@ -29,21 +29,16 @@ proc newLayout*(text: string, w, h: float): Layout =
       let 
         w = font.computeBounds(word).x
         span = newSpan(word, font)
-      if w + x > w:
+      if w + x > width:
         y += yd
         x = 0
-      result.display.add((
-        vec2(x, y), 
-        span
-      ))
+      result.display.add((vec2(x, y), span))
       x += w + whitespace
     y += yd
     x = 0
   y += yd
 
-  result.height = 
-    if y > h: h
-    else: y
+  result.height = max(y, height)
 
 
 

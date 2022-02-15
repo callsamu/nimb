@@ -6,7 +6,7 @@ proc main(url: string) =
   sdl2.init(INIT_EVERYTHING)
 
   var
-    browser = newBrowser("brOwOser")
+    browser = newBrowser("brOwOser", 800, 600)
     evt: sdl2.Event
   
   browser.layout = newLayout(request(url), 800, 600)
@@ -20,14 +20,14 @@ proc main(url: string) =
         of KeyDown:
           case evt.key.keysym.scancode:
             of SDL_SCANCODE_UP:
-              browser.scroll += 2.0
+              browser.scroll(-2.0)
             of SDL_SCANCODE_DOWN:
-              browser.scroll -= 2.0
+              browser.scroll(+2.0)
             of SDL_SCANCODE_SPACE:
-              browser.scroll -= 600.0
+              browser.scroll(+600.0)
             else: discard
         else: discard
-    browser.renderScreen()
+    browser.render()
     browser.display()
 
 when isMainModule:
