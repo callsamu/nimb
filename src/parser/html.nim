@@ -9,11 +9,16 @@ const
 
 type
   State* = enum
+    InText,
     StartTag,
     InClosingTag,
     InOpeningTag,
     WithAttributes,
-    InText
+    OnAttributeName,
+    OnAttributeEnd,
+    OnAttributeValue,
+    OnAttributeValueBegin,
+    OnQuotedAttributeValue
   NodeKind = enum
     Element,
     Text
@@ -25,12 +30,13 @@ type
     of Element: 
       element*: string
       children*: seq[Node]
-      attributes*: StringTableObj
+      attributes*: StringTableRef
   HTMLParser* = ref object
     openTags: seq[Node]
     counter: int
     current*: State
     previous: State
+    attributes: StringTableRef
 
 proc NewParser*(): HTMLParser =
   result = HTMLParser(counter: -1, current: InText)
@@ -47,18 +53,15 @@ proc transit(parser: HTMLParser, new: State) {.inline.} =
   parser.previous = parser.current
   parser.current = new
 
-proc addTag(parser: HTMLParser, tag: string) {.inline.} =
+proc addTag(parser: HTMLParser, tag: string, attributes: StringTableRef) {.inline.} =
   let 
     counter = parser.counter
-    parent = 
-      if counter >= 0:
-        parser.openTags[counter]
-      else: nil
+    parent = if counter >= 0: parser.openTags[counter] else: nil
 
   var node = NewNode(parent, Element, tag)
+  node.attributes = attributes
 
   if tag notin SELF_CLOSING_TAGS or parent == nil:
-    echo node.element
     parser.openTags.add(node)
     parser.counter += 1
 
@@ -69,9 +72,7 @@ proc addText(parser: HTMLParser, text: string) {.inline.} =
 proc popTag(parser: HTMLParser) {.inline.} =
   if parser.counter == 0: return 
   let tag = parser.openTags.pop()
-  echo tag.element
   echo tag.parent.element
-  tag.parent.children.add(tag)
   parser.counter -= 1
 
 proc printTree*(node: Node, sep = "--") =
@@ -79,21 +80,30 @@ proc printTree*(node: Node, sep = "--") =
     of Text:
       echo sep,node.text
     of Element:
-      echo sep,node.element
+      var attributes: string
+
+      for (key, value) in pairs(node.attributes):
+        attributes.add(key & "=" & value & ",")
+
+      echo sep,node.element,": ",attributes
       for children in node.children:
-        printTree(children, sep & sep)
+        printTree(children, sep & "--")
 
 proc parse*(parser: HTMLParser, html: string): Node =
-  var buffer, attribute, value: string
+  var 
+    buffer, attribute, value: string
+    attributeTable: StringTableRef;
 
   var i = 0
   while i < html.len:
     let c = html[i]
-    echo (parser.current, buffer, parser.counter)
+
+    echo (parser.current, buffer, attribute, value)
     case parser.current:
       of InText:
         if c == '<':
           parser.transit(StartTag)
+          attributeTable = newStringTable()
           buffer = buffer.strip(chars = {' ', '\n'})
           if buffer != "":
             parser.addText(buffer)
@@ -111,7 +121,7 @@ proc parse*(parser: HTMLParser, html: string): Node =
           parser.transit(WithAttributes)
         elif c == '>':
           parser.transit(InText)
-          parser.addTag(buffer)
+          parser.addTag(buffer, attributeTable)
           buffer = ""
         else:
           buffer.add(c)
@@ -123,9 +133,35 @@ proc parse*(parser: HTMLParser, html: string): Node =
         else:
           buffer.add(c)
       of WithAttributes:
-        if c == '>':
-          parser.transit(InOpeningTag)
+        while html[i] == ' ': i += 1
+        if html[i] == '>': parser.transit(InOpeningTag)
+        else: parser.transit(OnAttributeName)
+        continue
+      of OnAttributeName:
+        if c == '=': parser.transit(OnAttributeValueBegin)
+        else: attribute.add(c)
+      of OnAttributeValueBegin:
+        if c == '"': 
+          parser.transit(OnQuotedAttributeValue)
+        else: 
+          parser.transit(OnAttributeValue)
           continue
+      of OnQuotedAttributeValue:
+        while html[i] != '"': 
+          value.add(html[i])
+          i += 1
+        parser.transit(OnAttributeEnd)
+      of OnAttributeValue:
+        while html[i] != ' ' and html[i] != '>':
+          value.add(html[i])
+          i += 1
+        parser.transit(OnAttributeEnd)
+        continue
+      of OnAttributeEnd:
+        attributeTable[attribute] = value
+        (attribute, value) = ("", "")
+        parser.transit(WithAttributes)
+        continue
 
     i += 1
   result = parser.openTags[0]
