@@ -19,13 +19,13 @@ type
     Text
   Node* = ref object
     parent: Node
-    case kind: NodeKind
+    case kind*: NodeKind
     of Text: 
-      text: string
+      text*: string
     of Element: 
-      element: string
-      children: seq[Node]
-      attributes: StringTableObj
+      element*: string
+      children*: seq[Node]
+      attributes*: StringTableObj
   HTMLParser* = ref object
     openTags: seq[Node]
     counter: int
@@ -35,23 +35,17 @@ type
 proc NewParser*(): HTMLParser =
   result = HTMLParser(counter: -1, current: InText)
 
+proc NewNode(parent: Node, kind: NodeKind, name: string): Node =
+  result = Node(parent: parent, kind: kind)
+
+  if parent != nil: parent.children.add(result)
+
+  if kind == Element: result.element = name
+  elif kind == Text: result.text = name
+
 proc transit(parser: HTMLParser, new: State) {.inline.} =
   parser.previous = parser.current
   parser.current = new
-
-#[
-proc parseAttribute(attribute: string): (string, string) {.inline.} =
-  discard
-
-proc parseTagWithAttributes(text: string): (string, StringTableObj) =
-  let
-    split = text.splitWhitespace()
-    (tag, attributes) = (split[0], split[0..^1])
-
-  for a in attributes:
-    
-  discard
-]#
 
 proc addTag(parser: HTMLParser, tag: string) {.inline.} =
   let 
@@ -61,26 +55,16 @@ proc addTag(parser: HTMLParser, tag: string) {.inline.} =
         parser.openTags[counter]
       else: nil
 
-  var node = Node(
-    parent: parent,
-    kind: Element,
-    element: tag
-  )
+  var node = NewNode(parent, Element, tag)
 
-  if tag in SELF_CLOSING_TAGS and parent != nil:
-    parser.openTags[counter].children.add(node)
-  else:
+  if tag notin SELF_CLOSING_TAGS or parent == nil:
     echo node.element
     parser.openTags.add(node)
     parser.counter += 1
 
 proc addText(parser: HTMLParser, text: string) {.inline.} =
-  var node = Node(
-    parent: parser.openTags[parser.counter], 
-    kind: Text,
-    text: text
-  )
-  parser.openTags[parser.counter].children.add(node)
+  let parent = parser.openTags[parser.counter]
+  discard NewNode(parent, Text, text)
 
 proc popTag(parser: HTMLParser) {.inline.} =
   if parser.counter == 0: return 
@@ -97,12 +81,14 @@ proc printTree*(node: Node, sep = "--") =
     of Element:
       echo sep,node.element
       for children in node.children:
-        printTree(children, sep&"--")
+        printTree(children, sep & sep)
 
 proc parse*(parser: HTMLParser, html: string): Node =
-  var buffer: string
+  var buffer, attribute, value: string
 
-  for i, c in html:
+  var i = 0
+  while i < html.len:
+    let c = html[i]
     echo (parser.current, buffer, parser.counter)
     case parser.current:
       of InText:
@@ -138,9 +124,8 @@ proc parse*(parser: HTMLParser, html: string): Node =
           buffer.add(c)
       of WithAttributes:
         if c == '>':
-          
-          parser.addTag(buffer)
-          buffer = ""
-        buffer.add(c)
+          parser.transit(InOpeningTag)
+          continue
 
+    i += 1
   result = parser.openTags[0]
