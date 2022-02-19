@@ -66,31 +66,6 @@ proc requestHttp(url: URI, https: bool = false): Response =
   s.sendRequest(url, https)
   result = s.getResponse()
 
-proc parseHtml(html: string): string =
-  var 
-    inTag, inHead, closing = false
-    currentTag: string
-
-  for c in html:
-    case c:
-      of '<': 
-        inTag = true
-        currentTag = ""
-      of '/':
-        closing = true
-        continue
-      of '>':
-        inTag = false
-        if currentTag == "head":
-          inHead = not inHead
-      else:
-        if not inTag:
-          if not inHead:
-            result &= c
-        else:
-          currentTag &= c
-    closing = false
-
 proc request*(rawUrl: string): string =
   var 
     url = 
@@ -110,4 +85,4 @@ proc request*(rawUrl: string): string =
       response = url.requestHttp(https = true)
     else: echo "Scheme ",url.scheme," is not supported."
   
-  result = response.body.parseHtml
+  result = response.body
