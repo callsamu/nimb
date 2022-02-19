@@ -1,4 +1,4 @@
-import std/[sets, strutils, strtabs]
+import std/[sets, strutils, strtabs, parseutils]
 
 const
   SELF_CLOSING_TAGS = toHashSet([
@@ -15,6 +15,7 @@ type
   State* = enum
     InText,
     StartTag,
+    InDoctype,
     InClosingTag,
     InOpeningTag,
     WithAttributes,
@@ -35,6 +36,8 @@ type
       element*: string
       children*: seq[Node]
       attributes*: StringTableRef
+  Document* = object
+    root*, head*, body*: Node
   HTMLParser* = ref object
     openTags: seq[Node]
     counter: int
@@ -64,7 +67,7 @@ proc lastOpenTag(parser: HTMLParser): Node {.inline.} =
 
 proc popTag(parser: HTMLParser) {.inline.} =
   if parser.counter == 0: return 
-  echo "closing: ", tag.element
+  let tag = parser.openTags.pop()
   parser.counter -= 1
 
 proc openImplicitTag(parser: HTMLParser, tag: string) =
@@ -96,24 +99,19 @@ proc implicitTag(parser: HTMLParser, tag: string): bool {.inline.} =
   result = true
 
 proc addTag(parser: HTMLParser, tag: string, attributes: StringTableRef) {.inline.} =
+  let tag = tag.strip()
   while not parser.implicitTag(tag): discard
 
-  let 
-    counter = parser.counter
-    parent = if counter >= 0: parser.openTags[counter] else: nil
-
-  var node = NewNode(parent, Element, tag)
+  var node = NewNode(parser.lastOpenTag(), Element, tag)
   node.attributes = attributes
 
   if tag notin SELF_CLOSING_TAGS:
-    echo "opening: ", node.element
     parser.openTags.add(node)
     parser.counter += 1
 
 proc addText(parser: HTMLParser, text: string) {.inline.} =
   while not parser.implicitTag(""): discard
-  let parent = parser.openTags[parser.counter]
-  discard NewNode(parent, Text, text)
+  discard NewNode(parser.lastOpenTag(), Text, text)
 
 proc printTree*(node: Node, sep = "--") =
   case node.kind:
@@ -129,7 +127,17 @@ proc printTree*(node: Node, sep = "--") =
       for children in node.children:
         printTree(children, sep & "--")
 
-proc parse*(parser: HTMLParser, html: string): Node =
+proc finish(parser: HTMLParser): Document =
+  while parser.counter > 0: parser.popTag()
+
+  let 
+    root = parser.openTags.pop()
+    head = root.children[0]
+    body = root.children[1]
+
+  result = Document(root: root, head: head, body: body)
+
+proc parse*(parser: HTMLParser, html: string): Document =
   var 
     buffer, attribute, value: string
     attributeTable: StringTableRef;
@@ -138,24 +146,26 @@ proc parse*(parser: HTMLParser, html: string): Node =
   while i < html.len:
     let c = html[i]
 
-    echo (parser.current, buffer, attribute, value, parser.counter)
     case parser.current:
       of InText:
-        if c == '<':
-          parser.transit(StartTag)
-          attributeTable = newStringTable()
-          buffer = buffer.strip(chars = {' ', '\n'})
-          if buffer != "":
-            parser.addText(buffer)
-          buffer = ""
-        else:
-          buffer.add(c)
+        i += html.parseUntil(buffer, '<', i)
+        parser.transit(StartTag)
+        attributeTable = newStringTable()
+        buffer = buffer.strip(chars = {' ', '\n'})
+        if buffer != "":
+          parser.addText(buffer)
+        buffer = ""
       of StartTag:
         if c == '/':
           parser.transit(InClosingTag)
+        elif c == '!':
+          parser.transit(InDoctype)
         else:
           parser.transit(InOpeningTag)
           buffer.add(c)
+      of InDoctype:
+        i += html.skipUntil('>', start = i)
+        parser.transit(InText)
       of InOpeningTag:
         if c == ' ':
           parser.transit(WithAttributes)
@@ -178,8 +188,12 @@ proc parse*(parser: HTMLParser, html: string): Node =
         else: parser.transit(OnAttributeName)
         continue
       of OnAttributeName:
-        if c == '=': parser.transit(OnAttributeValueBegin)
-        else: attribute.add(c)
+        i += html.parseIdent(attribute, start = i)
+        if html[i] != '=':
+          value = "true"
+          parser.transit(OnAttributeEnd)
+          continue
+        parser.transit(OnAttributeValueBegin)
       of OnAttributeValueBegin:
         if c == '"': 
           parser.transit(OnQuotedAttributeValue)
@@ -187,14 +201,10 @@ proc parse*(parser: HTMLParser, html: string): Node =
           parser.transit(OnAttributeValue)
           continue
       of OnQuotedAttributeValue:
-        while html[i] != '"': 
-          value.add(html[i])
-          i += 1
+        i += html.parseUntil(value, '"', start = i)
         parser.transit(OnAttributeEnd)
       of OnAttributeValue:
-        while html[i] != ' ' and html[i] != '>':
-          value.add(html[i])
-          i += 1
+        i += html.parseUntil(value, {' ', '>'}, start = i)
         parser.transit(OnAttributeEnd)
         continue
       of OnAttributeEnd:
@@ -205,6 +215,4 @@ proc parse*(parser: HTMLParser, html: string): Node =
 
     i += 1
 
-  echo "Finishing."
-  echo parser.openTags[0].element
-  result = parser.openTags[0]
+  result = parser.finish()
