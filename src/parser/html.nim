@@ -6,6 +6,10 @@ const
     "hr", "track", "area", "input",
     "param", "source", "wbr"
   ])
+  IN_HEAD_TAGS = toHashSet([
+    "base", "basefont", "bgsound", "noscript",
+    "link", "meta", "title", "style", "script"
+  ])
 
 type
   State* = enum
@@ -23,7 +27,7 @@ type
     Element,
     Text
   Node* = ref object
-    parent: Node
+    parent*: Node
     case kind*: NodeKind
     of Text: 
       text*: string
@@ -53,7 +57,47 @@ proc transit(parser: HTMLParser, new: State) {.inline.} =
   parser.previous = parser.current
   parser.current = new
 
+proc lastOpenTag(parser: HTMLParser): Node {.inline.} =
+    let counter = parser.counter
+    result = if counter < 0: nil 
+             else: parser.openTags[counter]
+
+proc popTag(parser: HTMLParser) {.inline.} =
+  if parser.counter == 0: return 
+  echo "closing: ", tag.element
+  parser.counter -= 1
+
+proc openImplicitTag(parser: HTMLParser, tag: string) =
+    let node = NewNode(parser.lastOpenTag, Element, tag)
+    node.attributes = newStringTable()
+    parser.openTags.add(node)
+    parser.counter += 1
+
+proc implicitTag(parser: HTMLParser, tag: string): bool {.inline.} =
+  if parser.counter < 0 and tag != "html":
+    parser.openImplicitTag("html")
+    return
+  elif parser.counter == 0:
+    if tag != "head" and tag in IN_HEAD_TAGS:
+      parser.openImplicitTag("head")
+      return
+    elif tag != "body" and tag notin IN_HEAD_TAGS:
+      parser.openImplicitTag("body")
+      return
+  elif parser.counter == 1:
+    if tag notin IN_HEAD_TAGS and 
+      parser.openTags[1].element == "head":
+      parser.popTag()
+      return
+  elif parser.lastOpenTag().element == "p" and tag == "p":
+    parser.popTag()
+    return
+
+  result = true
+
 proc addTag(parser: HTMLParser, tag: string, attributes: StringTableRef) {.inline.} =
+  while not parser.implicitTag(tag): discard
+
   let 
     counter = parser.counter
     parent = if counter >= 0: parser.openTags[counter] else: nil
@@ -61,19 +105,15 @@ proc addTag(parser: HTMLParser, tag: string, attributes: StringTableRef) {.inlin
   var node = NewNode(parent, Element, tag)
   node.attributes = attributes
 
-  if tag notin SELF_CLOSING_TAGS or parent == nil:
+  if tag notin SELF_CLOSING_TAGS:
+    echo "opening: ", node.element
     parser.openTags.add(node)
     parser.counter += 1
 
 proc addText(parser: HTMLParser, text: string) {.inline.} =
+  while not parser.implicitTag(""): discard
   let parent = parser.openTags[parser.counter]
   discard NewNode(parent, Text, text)
-
-proc popTag(parser: HTMLParser) {.inline.} =
-  if parser.counter == 0: return 
-  let tag = parser.openTags.pop()
-  echo tag.parent.element
-  parser.counter -= 1
 
 proc printTree*(node: Node, sep = "--") =
   case node.kind:
@@ -98,7 +138,7 @@ proc parse*(parser: HTMLParser, html: string): Node =
   while i < html.len:
     let c = html[i]
 
-    echo (parser.current, buffer, attribute, value)
+    echo (parser.current, buffer, attribute, value, parser.counter)
     case parser.current:
       of InText:
         if c == '<':
@@ -164,4 +204,7 @@ proc parse*(parser: HTMLParser, html: string): Node =
         continue
 
     i += 1
+
+  echo "Finishing."
+  echo parser.openTags[0].element
   result = parser.openTags[0]
