@@ -140,8 +140,11 @@ proc printTree*(node: Node, sep = "--") =
 proc finish(parser: HTMLParser): Document =
   while parser.counter > 0: parser.popTag()
 
-  let 
-    root = parser.openTags.pop()
+
+  let root = parser.openTags.pop()
+  assert root.children >= 2
+
+  let
     head = root.children[0]
     body = root.children[1]
 
