@@ -99,7 +99,7 @@ proc implicitTag(parser: HTMLParser, tag: string): bool {.inline.} =
       parser.popTag()
       return
 
-  let last  = parser.lastOpenTag()
+  let last = parser.lastOpenTag()
   if last != nil:
     if last.element == "p" and tag == "p":
       parser.popTag()
@@ -140,9 +140,8 @@ proc printTree*(node: Node, sep = "--") =
 proc finish(parser: HTMLParser): Document =
   while parser.counter > 0: parser.popTag()
 
-
   let root = parser.openTags.pop()
-  assert root.children >= 2
+  assert root.children.len >= 2
 
   let
     head = root.children[0]
@@ -180,10 +179,10 @@ proc parse*(parser: HTMLParser, html: string): Document =
           attributeTable = newStringTable()
           continue
       of InDoctype:
-        i += html.skipUntil('>', start = i)
+        i += html.skipUntil('>', i)
         parser.transit(InText)
       of InStyle:
-        i += html.skipUntil('<', start = i)
+        i += html.skipUntil('<', i)
         parser.transit(StartTag)
       of InOpeningTag:
         if parser.previous == StartTag:
@@ -224,10 +223,10 @@ proc parse*(parser: HTMLParser, html: string): Document =
           parser.transit(OnAttributeValue)
           continue
       of OnQuotedAttributeValue:
-        i += html.parseUntil(value, '"', start = i)
+        i += html.parseUntil(value, '"', i)
         parser.transit(OnAttributeEnd)
       of OnAttributeValue:
-        i += html.parseUntil(value, {' ', '>'}, start = i)
+        i += html.parseUntil(value, {' ', '>'}, i)
         parser.transit(OnAttributeEnd)
         continue
       of OnAttributeEnd:
