@@ -8,17 +8,19 @@ const
   ])
   IN_HEAD_TAGS = toHashSet([
     "base", "basefont", "bgsound", "noscript",
-    "link", "meta", "title", "style", "script"
+    "link", "meta", "title", "style", "script",
+    "head"
   ])
+  TOKEN_CHARS = IdentChars + {'-'}
 
 type
   State* = enum
     InText,
+    InStyle,
     StartTag,
     InDoctype,
     InClosingTag,
     InOpeningTag,
-    WithAttributes,
     OnAttributeName,
     OnAttributeEnd,
     OnAttributeValue,
@@ -69,6 +71,7 @@ proc popTag(parser: HTMLParser) {.inline.} =
   if parser.counter == 0: return 
   let tag = parser.openTags.pop()
   parser.counter -= 1
+  echo tag.element
 
 proc openImplicitTag(parser: HTMLParser, tag: string) =
     let node = NewNode(parser.lastOpenTag, Element, tag)
@@ -78,13 +81,16 @@ proc openImplicitTag(parser: HTMLParser, tag: string) =
 
 proc implicitTag(parser: HTMLParser, tag: string): bool {.inline.} =
   if parser.counter < 0 and tag != "html":
+    echo "Inserting implicit html"
     parser.openImplicitTag("html")
     return
   elif parser.counter == 0:
     if tag != "head" and tag in IN_HEAD_TAGS:
-      parser.openImplicitTag("head")
-      return
+        echo "Inserting implicit head"
+        parser.openImplicitTag("head")
+        return
     elif tag != "body" and tag notin IN_HEAD_TAGS:
+      echo "Inserting implicit body"
       parser.openImplicitTag("body")
       return
   elif parser.counter == 1:
@@ -92,14 +98,18 @@ proc implicitTag(parser: HTMLParser, tag: string): bool {.inline.} =
       parser.openTags[1].element == "head":
       parser.popTag()
       return
-  elif parser.lastOpenTag().element == "p" and tag == "p":
-    parser.popTag()
-    return
+
+  let last  = parser.lastOpenTag()
+  if last != nil:
+    if last.element == "p" and tag == "p":
+      parser.popTag()
+      return
 
   result = true
 
 proc addTag(parser: HTMLParser, tag: string, attributes: StringTableRef) {.inline.} =
   let tag = tag.strip()
+  echo tag
   while not parser.implicitTag(tag): discard
 
   var node = NewNode(parser.lastOpenTag(), Element, tag)
@@ -142,10 +152,12 @@ proc parse*(parser: HTMLParser, html: string): Document =
     buffer, attribute, value: string
     attributeTable: StringTableRef;
 
+
   var i = 0
   while i < html.len:
     let c = html[i]
 
+    echo (parser.current, buffer)
     case parser.current:
       of InText:
         i += html.parseUntil(buffer, '<', i)
@@ -162,19 +174,32 @@ proc parse*(parser: HTMLParser, html: string): Document =
           parser.transit(InDoctype)
         else:
           parser.transit(InOpeningTag)
-          buffer.add(c)
+          attributeTable = newStringTable()
+          continue
       of InDoctype:
         i += html.skipUntil('>', start = i)
         parser.transit(InText)
+      of InStyle:
+        i += html.skipUntil('<', start = i)
+        parser.transit(StartTag)
       of InOpeningTag:
-        if c == ' ':
-          parser.transit(WithAttributes)
-        elif c == '>':
-          parser.transit(InText)
+        if parser.previous == StartTag:
+          i += html.skipWhitespace(i)
+          i += html.parseWhile(buffer, TOKEN_CHARS, i)
+
+        i += html.skipWhitespace(i)
+        let c = html[i]
+
+        if c == '>':
+          if buffer == "style": parser.transit(InStyle)
+          else: parser.transit(InText)
           parser.addTag(buffer, attributeTable)
           buffer = ""
-        else:
-          buffer.add(c)
+        elif c == '/': 
+          discard
+        elif c in TOKEN_CHARS:
+          parser.transit(OnAttributeName)
+          continue
       of InClosingTag:
         if c == '>':
           parser.transit(InText)
@@ -182,13 +207,8 @@ proc parse*(parser: HTMLParser, html: string): Document =
           buffer = ""
         else:
           buffer.add(c)
-      of WithAttributes:
-        while html[i] == ' ': i += 1
-        if html[i] == '>': parser.transit(InOpeningTag)
-        else: parser.transit(OnAttributeName)
-        continue
       of OnAttributeName:
-        i += html.parseIdent(attribute, start = i)
+        i += html.parseWhile(attribute, TOKEN_CHARS, i)
         if html[i] != '=':
           value = "true"
           parser.transit(OnAttributeEnd)
@@ -210,7 +230,7 @@ proc parse*(parser: HTMLParser, html: string): Document =
       of OnAttributeEnd:
         attributeTable[attribute] = value
         (attribute, value) = ("", "")
-        parser.transit(WithAttributes)
+        parser.transit(InOpeningTag)
         continue
 
     i += 1
